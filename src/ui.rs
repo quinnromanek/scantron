@@ -1,13 +1,13 @@
-use junit_parser::{TestStatus, TestSuite};
+use junit_parser::TestStatus;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
-    text::{Line, Span, Text},
+    text::{Line, Span},
     widgets::{Block, BorderType, Paragraph},
     Frame,
 };
 use throbber_widgets_tui::Throbber;
-use tui_tree_widget::{Tree, TreeItem};
+use tui_tree_widget::Tree;
 
 use crate::app::App;
 
