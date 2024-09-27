@@ -242,8 +242,13 @@ fn build_tree<'a>(
 }
 
 async fn run_suite(command: String, filename: OsString) -> TestResult<TestSuites> {
-    let out = Command::new(command)
-        .arg(filename)
+    let mut split_command = command.split(" ");
+    let cmd = split_command.next().unwrap();
+
+    let mut full_cmd = Command::new(cmd);
+    full_cmd.args(split_command).arg(filename);
+
+    let out = full_cmd
         .output()
         .await
         .map_err(|e| Box::new(e) as Box<dyn Error + Send>)?;
