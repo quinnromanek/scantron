@@ -1,3 +1,5 @@
+use std::error::Error;
+
 use junit_parser::TestStatus;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -30,6 +32,26 @@ fn render_empty(app: &mut App, frame: &mut Frame) {
         layout[1],
     )
 }
+
+fn render_error(app: &App, frame: &mut Frame, error: &dyn Error) {
+    let layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(vec![Constraint::Length(3), Constraint::Percentage(100)])
+        .split(frame.area());
+    render_header(app, frame, layout[0]);
+    frame.render_widget(
+        Paragraph::new(format!("{}", error))
+            .block(
+                Block::bordered()
+                    .title("Test Results")
+                    .title_alignment(Alignment::Center)
+                    .border_type(BorderType::Rounded),
+            )
+            .style(Style::default().fg(Color::Red).bg(Color::Black))
+            .centered(),
+        layout[1],
+    )
+}
 /// Renders the user interface widgets.
 pub fn render_header(app: &App, frame: &mut Frame, area: Rect) {
     let filename = app.file.file_name().unwrap().to_string_lossy();
@@ -54,8 +76,16 @@ pub fn render(app: &mut App, frame: &mut Frame) {
     // - https://docs.rs/ratatui/latest/ratatui/widgets/index.html
     // - https://github.com/ratatui/ratatui/tree/master/examples
 
+    match &app.result {
+        Some(Ok(_)) => {}
+        Some(Err(err)) => {
+            render_error(app, frame, err.as_ref());
+        }
+        _ => {
+            render_empty(app, frame);
+        }
+    }
     let Some(Ok(result)) = &app.result else {
-        render_empty(app, frame);
         return;
     };
 
