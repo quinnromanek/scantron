@@ -1,5 +1,6 @@
 use std::{io, path::PathBuf};
 
+use app::Action;
 use ratatui::{backend::CrosstermBackend, Terminal};
 use tokio::sync::mpsc;
 
@@ -21,6 +22,9 @@ pub mod ui;
 #[derive(Parser)]
 struct Args {
     file: String,
+
+    #[arg(short, long)]
+    cmd: Option<String>,
 }
 
 #[tokio::main]
@@ -29,7 +33,8 @@ async fn main() -> AppResult<()> {
 
     let (action_tx, mut action_rx) = mpsc::unbounded_channel();
     // Create an application.
-    let mut app = App::new(PathBuf::from(args.file), action_tx);
+    action_tx.send(Action::TriggerRun).unwrap();
+    let mut app = App::new(PathBuf::from(args.file), args.cmd, action_tx);
 
     // Initialize the terminal user interface.
     let backend = CrosstermBackend::new(io::stdout());

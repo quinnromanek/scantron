@@ -1,9 +1,16 @@
+use async_process::Command;
 use junit_parser::{TestStatus, TestSuite, TestSuites};
 use ratatui::{
     style::{Color, Style},
     text::Text,
 };
-use std::{collections::HashMap, error, path::PathBuf};
+use std::{
+    collections::HashMap,
+    error::{self, Error},
+    ffi::OsString,
+    io::Cursor,
+    path::PathBuf,
+};
 use throbber_widgets_tui::ThrobberState;
 use tokio::sync::mpsc;
 use tui_tree_widget::{TreeItem, TreeState};
@@ -16,6 +23,7 @@ pub type TestResult<T> = std::result::Result<T, Box<dyn error::Error + Send>>;
 pub enum Action {
     TestResult(TestResult<TestSuites>),
     TestStarted,
+    TriggerRun,
 }
 
 /// Application.
@@ -37,11 +45,17 @@ pub struct App {
     pub is_running: bool,
 
     pub throbber_state: throbber_widgets_tui::ThrobberState,
+
+    pub cmd: Option<String>,
 }
 
 impl App {
     /// Constructs a new instance of [`App`].
-    pub fn new(file: PathBuf, action_tx: mpsc::UnboundedSender<Action>) -> Self {
+    pub fn new(
+        file: PathBuf,
+        cmd: Option<String>,
+        action_tx: mpsc::UnboundedSender<Action>,
+    ) -> Self {
         Self {
             running: true,
             counter: 0,
@@ -50,13 +64,17 @@ impl App {
             tree_state: TreeState::default(),
             is_running: false,
             throbber_state: ThrobberState::default(),
+            cmd,
 
             action_tx,
         }
     }
 
     pub fn command(&self) -> String {
-        "cat".to_owned()
+        match &self.cmd {
+            Some(cmd) => cmd.clone(),
+            None => "cat".to_owned(),
+        }
     }
 
     /// Handles the tick event of the terminal.
@@ -81,6 +99,19 @@ impl App {
         }
     }
 
+    pub fn trigger_run(&mut self) {
+        let tx = self.action_tx.clone();
+        if !self.is_running {
+            self.is_running = true;
+            let filename = self.file.as_os_str().to_owned();
+            let command = self.command();
+            tokio::spawn(async move {
+                let suites = run_suite(command, filename).await;
+                tx.send(Action::TestResult(suites)).unwrap();
+            });
+        }
+    }
+
     pub fn update(&mut self, action: Action) {
         match action {
             Action::TestResult(result) => {
@@ -93,6 +124,9 @@ impl App {
             }
             Action::TestStarted => {
                 self.is_running = true;
+            }
+            Action::TriggerRun => {
+                self.trigger_run();
             }
         }
     }
@@ -205,4 +239,18 @@ fn build_tree<'a>(
         items,
     )
     .unwrap()
+}
+
+async fn run_suite(command: String, filename: OsString) -> TestResult<TestSuites> {
+    let out = Command::new(command)
+        .arg(filename)
+        .output()
+        .await
+        .map_err(|e| Box::new(e) as Box<dyn Error + Send>)?;
+    let raw = String::from_utf8(out.stdout).unwrap();
+
+    let cursor = Cursor::new(raw);
+    let suites =
+        junit_parser::from_reader(cursor).map_err(|e| Box::new(e) as Box<dyn Error + Send>);
+    suites
 }

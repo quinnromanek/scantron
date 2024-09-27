@@ -1,9 +1,6 @@
-use std::{error::Error, ffi::OsString, io::Cursor};
-
-use crate::app::{Action, App, AppResult, TestResult};
-use async_process::Command;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use junit_parser::TestSuites;
+
+use crate::app::{App, AppResult};
 
 /// Handles the key events and updates the state of [`App`].
 pub fn handle_key_events(key_event: KeyEvent, app: &mut App) -> AppResult<()> {
@@ -20,16 +17,7 @@ pub fn handle_key_events(key_event: KeyEvent, app: &mut App) -> AppResult<()> {
         }
         // Counter handlers
         KeyCode::Char('r') => {
-            let tx = app.action_tx.clone();
-            if !app.is_running {
-                app.is_running = true;
-                let filename = app.file.as_os_str().to_owned();
-                let command = app.command();
-                tokio::spawn(async move {
-                    let suites = run_suite(command, filename).await;
-                    tx.send(Action::TestResult(suites)).unwrap();
-                });
-            }
+            app.trigger_run();
         }
         KeyCode::Left => {
             app.tree_state.key_left();
@@ -47,18 +35,4 @@ pub fn handle_key_events(key_event: KeyEvent, app: &mut App) -> AppResult<()> {
         _ => {}
     }
     Ok(())
-}
-
-async fn run_suite(command: String, filename: OsString) -> TestResult<TestSuites> {
-    let out = Command::new(command)
-        .arg(filename)
-        .output()
-        .await
-        .map_err(|e| Box::new(e) as Box<dyn Error + Send>)?;
-    let raw = String::from_utf8(out.stdout).unwrap();
-
-    let cursor = Cursor::new(raw);
-    let suites =
-        junit_parser::from_reader(cursor).map_err(|e| Box::new(e) as Box<dyn Error + Send>);
-    suites
 }
